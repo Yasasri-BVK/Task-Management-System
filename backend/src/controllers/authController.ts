@@ -4,6 +4,11 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { Op } from 'sequelize';
 import User from '../models/User';
+import Notification from '../models/Notification';
+import Comment from '../models/Comment';
+import Attachment from '../models/Attachment';
+import TaskAssignee from '../models/TaskAssignee';
+import Task from '../models/Task';
 import {
   sendWelcomeEmail,
   sendPasswordChangedEmail,
@@ -123,7 +128,6 @@ export const getUsers = async (req: AuthenticatedRequest, res: Response): Promis
   try {
     const requestingRole = req.user!.role;
 
-    // All roles can call this endpoint; filter is applied per role below
     const users = await User.findAll({
       attributes: ['id', 'name', 'email', 'role', 'isActive'],
       order: [['name', 'ASC']],
@@ -141,13 +145,70 @@ export const getUsers = async (req: AuthenticatedRequest, res: Response): Promis
   }
 };
 
+// ── DELETE USER (Admin only) ───────────────────────────
+// DELETE /api/auth/users/:id
+// Deletes all FK-referenced records first to avoid constraint violations
+export const deleteUser = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const targetId = Number(req.params.id);
+
+    // Prevent admin from deleting themselves
+    if (targetId === Number(req.user!.userId)) {
+      res.status(400).json({ errorCode: 400, message: 'Bad Request', description: 'You cannot delete your own account' });
+      return;
+    }
+
+    const user = await User.findByPk(targetId);
+    if (!user) {
+      res.status(404).json({ errorCode: 404, message: 'Not Found', description: 'User not found' });
+      return;
+    }
+
+    // ── 1. Remove task assignee records (task_assignees / task_members table) ──
+    await TaskAssignee.destroy({ where: { userId: targetId } });
+
+    // ── 2. Delete tasks created by this user ──────────────────────────────────
+    //    First remove assignees of those tasks, then the tasks themselves
+    // Cast where clause to any to satisfy TypeScript when attribute name differs in TaskAttributes
+    const createdTasks = await Task.findAll({ where: { creatorId: targetId } as any });
+    const createdTaskIds = createdTasks.map((t: any) => t.id);
+    if (createdTaskIds.length > 0) {
+      await TaskAssignee.destroy({ where: { taskId: createdTaskIds } });
+      // Nullify or cascade comments/attachments on those tasks
+      await Comment.destroy({ where: { taskId: createdTaskIds } });
+      await Attachment.destroy({ where: { taskId: createdTaskIds } });
+      await Task.destroy({ where: { id: createdTaskIds } });
+    }
+
+    // ── 3. Delete notifications sent to or triggered by this user ────────────
+    await Notification.destroy({ where: { userId: targetId } });
+
+    // ── 4. Delete comments made by this user ─────────────────────────────────
+    await Comment.destroy({ where: { userId: targetId } });
+
+    // ── 5. Nullify uploadedBy on attachments this user uploaded to OTHER tasks ──
+    //    Preserves the attachment/file on the task but removes the FK reference
+    const otherTaskFilter: any = createdTaskIds.length > 0
+      ? { uploadedBy: targetId, taskId: { [Op.notIn]: createdTaskIds } }
+      : { uploadedBy: targetId };
+    await (Attachment as any).update({ uploadedBy: null }, { where: otherTaskFilter });
+
+    // ── 6. Finally delete the user ────────────────────────────────────────────
+    await user.destroy();
+
+    res.status(200).json({ message: `User "${user.name}" has been permanently deleted` });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ errorCode: 500, message: 'Internal Server Error', description: 'Something went wrong on the server' });
+  }
+};
+
 // ── CHANGE PASSWORD ────────────────────────────────────
 // POST /api/auth/change-password
 export const changePassword = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { newPassword } = req.body;
 
-    // Full password complexity validation
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
     if (!newPassword) {
@@ -201,8 +262,6 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
 
     const user = await User.findOne({ where: { email: email.trim() } });
 
-    // Security best practice: always return the same message
-    // whether the email exists or not
     if (!user || !user.isActive) {
       res.status(200).json({ message: 'If this email is registered, a reset link has been sent.' });
       return;
@@ -266,7 +325,6 @@ export const verifyResetToken = async (req: Request, res: Response): Promise<voi
 // POST /api/auth/reset-password
 export const resetPassword = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Accept token from URL params OR from request body
     const token = (req.params.token || req.body.token) as string;
     const newPassword = (req.body.password || req.body.newPassword) as string;
 

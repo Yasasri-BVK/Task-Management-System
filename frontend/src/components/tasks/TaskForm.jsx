@@ -13,6 +13,10 @@ export default function TaskForm() {
   const { user }   = useAuth();
   const navigate   = useNavigate();
 
+  const [isDark, setIsDark] = useState(
+    document.documentElement.getAttribute('data-theme') === 'dark' ||
+    document.documentElement.classList.contains('dark')
+  );
   const [form, setForm] = useState({
     title: '', description: '', priority: 'Medium', status: 'To Do', dueDate: ''
   });
@@ -36,6 +40,16 @@ export default function TaskForm() {
   useEffect(() => {
     fetchUsers();
     if (isEdit) fetchTask();
+
+    // Watch <html> for theme changes (data-theme attr or class toggle)
+    const observer = new MutationObserver(() => {
+      setIsDark(
+        document.documentElement.getAttribute('data-theme') === 'dark' ||
+        document.documentElement.classList.contains('dark')
+      );
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] });
+    return () => observer.disconnect();
   }, []);
 
   // ── fetch only ACTIVE users (backend rejects inactive on assign) ──────────
@@ -256,7 +270,7 @@ export default function TaskForm() {
               <label style={labelStyle}>Due Date</label>
               <input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })}
                 min={new Date().toISOString().split('T')[0]}
-                style={{ ...inputStyle, borderColor: errors.dueDate ? '#ef4444' : 'var(--border)' }} />
+                style={{ ...inputStyle, borderColor: errors.dueDate ? '#ef4444' : 'var(--border)', colorScheme: isDark ? 'dark' : 'light' }} />
               {errors.dueDate && <p style={{ fontSize: '11px', color: '#ef4444', margin: '4px 0 0' }}>{errors.dueDate}</p>}
             </div>
           </div>

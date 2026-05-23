@@ -6,6 +6,7 @@ const navItems = [
   { to: '/home',  icon: '🏠', label: 'Dashboard', roles: ['Admin', 'ProjectManager', 'Collaborator'] },
   { to: '/tasks', icon: '📋', label: 'Tasks',     roles: ['Admin', 'ProjectManager', 'Collaborator'] },
   { to: '/users', icon: '👥', label: 'Users',     roles: ['Admin'] },
+  { to: '/analytics', icon: '📊', label: 'Analytics', roles: ['Admin'] },
   { to: '/team',  icon: '👷', label: 'My Team',   roles: ['ProjectManager'] },
 ];
 
