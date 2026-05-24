@@ -121,9 +121,12 @@ export default function TaskForm() {
     if (!form.title.trim())                   e.title = 'Title is required';
     else if (form.title.trim().length < 3)    e.title = 'Title must be at least 3 characters';
     else if (form.title.trim().length > 200)  e.title = 'Title cannot exceed 200 characters';
-    if (form.dueDate) {
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      if (new Date(form.dueDate) < today) e.dueDate = 'Due date cannot be in the past';
+    if (form.dueDate && form.dueDate.trim() !== '') {
+      const parsed = new Date(form.dueDate);
+      if (!isNaN(parsed.getTime())) {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        if (parsed < today) e.dueDate = 'Due date cannot be in the past';
+      }
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -143,8 +146,9 @@ export default function TaskForm() {
           description: form.description.trim() || null,
           priority:    form.priority,
           status:      form.status,
-          dueDate:     form.dueDate || null,
-          assigneeIds: selectedIds          // backend handles validation
+          // Only include dueDate if user set one — backend treats null as Jan 1 1970
+          ...(form.dueDate && form.dueDate.trim() !== '' ? { dueDate: form.dueDate } : {}),
+          assigneeIds: selectedIds
         });
         toast.success('Task created successfully');
 
@@ -157,7 +161,9 @@ export default function TaskForm() {
           description: form.description.trim() || null,
           priority:    form.priority,
           status:      form.status,
-          dueDate:     form.dueDate || null
+          // Only include dueDate if user set one — sending null causes backend to
+          // evaluate new Date(null) = Jan 1 1970 which always fails past-date check
+          ...(form.dueDate && form.dueDate.trim() !== '' ? { dueDate: form.dueDate } : {}),
         });
 
         // 2. Add new members  →  POST /tasks/:id/members  { userIds: [...] }
@@ -269,7 +275,6 @@ export default function TaskForm() {
             <div>
               <label style={labelStyle}>Due Date</label>
               <input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })}
-                min={new Date().toISOString().split('T')[0]}
                 style={{ ...inputStyle, borderColor: errors.dueDate ? '#ef4444' : 'var(--border)', colorScheme: isDark ? 'dark' : 'light' }} />
               {errors.dueDate && <p style={{ fontSize: '11px', color: '#ef4444', margin: '4px 0 0' }}>{errors.dueDate}</p>}
             </div>

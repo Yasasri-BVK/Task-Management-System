@@ -13,21 +13,21 @@ import { AuthenticatedRequest } from '../middleware/authMiddleware';
 // Admin only — supports search and filter
 export const getAllUsers = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const query = req.query;
+    const query  = req.query;
     const search = typeof query.search === 'string' ? query.search : '';
-    const role = typeof query.role === 'string' ? query.role : '';
+    const role   = typeof query.role   === 'string' ? query.role   : '';
     const status = typeof query.status === 'string' ? query.status : '';
 
     const whereCondition: Record<string, any> = {};
 
     if (search) {
       whereCondition[Op.or as any] = [
-        { name: { [Op.like]: `%${search}%` } },
+        { name:  { [Op.like]: `%${search}%` } },
         { email: { [Op.like]: `%${search}%` } }
       ];
     }
 
-    if (role) whereCondition.role = role;
+    if (role)   whereCondition.role     = role;
     if (status) whereCondition.isActive = status === 'active';
 
     const users = await User.findAll({
@@ -47,10 +47,10 @@ export const getAllUsers = async (req: AuthenticatedRequest, res: Response): Pro
 // GET /api/users/:id
 export const getUserById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
-    const userId = id as string;
+    // Cast to string — req.params values are string | string[] in some TS configs
+    const id = String(req.params.id);
 
-    const user = await User.findByPk(userId, {
+    const user = await User.findByPk(id, {
       attributes: { exclude: ['password', 'resetToken', 'resetTokenExpiry'] }
     });
 
@@ -70,9 +70,9 @@ export const getUserById = async (req: AuthenticatedRequest, res: Response): Pro
 // GET /api/users/team
 export const getTeamMembers = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const query = req.query;
+    const query  = req.query;
     const search = typeof query.search === 'string' ? query.search : '';
-    const role = typeof query.role === 'string' ? query.role : '';
+    const role   = typeof query.role   === 'string' ? query.role   : '';
 
     const whereCondition: Record<string, any> = {
       role: { [Op.in]: ['ProjectManager', 'Collaborator'] },
@@ -82,7 +82,7 @@ export const getTeamMembers = async (req: AuthenticatedRequest, res: Response): 
     if (search) {
       whereCondition[Op.and as any] = [{
         [Op.or]: [
-          { name: { [Op.like]: `%${search}%` } },
+          { name:  { [Op.like]: `%${search}%` } },
           { email: { [Op.like]: `%${search}%` } }
         ]
       }];
@@ -121,8 +121,7 @@ interface UpdateUserRequest {
 
 export const updateUser = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
-    const userId = id as string;
+    const id     = String(req.params.id);
     const { name, email, role } = req.body as UpdateUserRequest;
 
     // Block any attempt to update password through this endpoint
@@ -136,9 +135,9 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response): Prom
       return;
     }
 
-    const user = await User.findByPk(userId);
+    const user = await User.findByPk(id);
     if (!user) {
-      res.status(404).json({ errorCode: 404, message: 'Not Found', description: `No user found with ID ${userId}` });
+      res.status(404).json({ errorCode: 404, message: 'Not Found', description: `No user found with ID ${id}` });
       return;
     }
 
@@ -187,7 +186,11 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response): Prom
       }
       if (email !== user.email) {
         const emailExists = await User.findOne({
-          where: { email: email.trim(), id: { [Op.ne]: userId } }
+          where: {
+            email: email.trim(),
+            // parseInt ensures the comparison is number vs number
+            id: { [Op.ne]: parseInt(id, 10) }
+          }
         });
         if (emailExists) {
           res.status(400).json({ errorCode: 400, message: 'Bad Request', description: 'This email is already used by another user' });
@@ -211,14 +214,14 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response): Prom
 
     // Track what actually changed to include in the email
     const updatedFields: Record<string, string> = {};
-    if (name && name.trim() !== user.name) updatedFields['Name'] = name.trim();
+    if (name  && name.trim()  !== user.name)  updatedFields['Name']  = name.trim();
     if (email && email.trim() !== user.email) updatedFields['Email'] = email.trim();
-    if (role && role !== user.role) updatedFields['Role'] = role;
+    if (role  && role         !== user.role)  updatedFields['Role']  = role;
 
     await user.update({
-      name: name ? name.trim() : user.name,
+      name:  name  ? name.trim()  : user.name,
       email: email ? email.trim() : user.email,
-      role: role || user.role
+      role:  role  || user.role
     });
 
     // Send update email only if something actually changed
@@ -244,12 +247,11 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response): Prom
 // PATCH /api/users/:id/deactivate
 export const deactivateUser = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
-    const userId = id as string;
-    const user = await User.findByPk(userId);
+    const id   = String(req.params.id);
+    const user = await User.findByPk(id);
 
     if (!user) {
-      res.status(404).json({ errorCode: 404, message: 'Not Found', description: `No user found with ID ${userId}` });
+      res.status(404).json({ errorCode: 404, message: 'Not Found', description: `No user found with ID ${id}` });
       return;
     }
 
@@ -288,12 +290,11 @@ export const deactivateUser = async (req: AuthenticatedRequest, res: Response): 
 // PATCH /api/users/:id/activate
 export const activateUser = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
-    const userId = id as string;
-    const user = await User.findByPk(userId);
+    const id   = String(req.params.id);
+    const user = await User.findByPk(id);
 
     if (!user) {
-      res.status(404).json({ errorCode: 404, message: 'Not Found', description: `No user found with ID ${userId}` });
+      res.status(404).json({ errorCode: 404, message: 'Not Found', description: `No user found with ID ${id}` });
       return;
     }
 
@@ -312,14 +313,16 @@ export const activateUser = async (req: AuthenticatedRequest, res: Response): Pr
 
 // ── DELETE USER ────────────────────────────────────────
 // DELETE /api/users/:id
+// Manually cleans up all related records before deleting the user
+// This works even if CASCADE is not yet set on the database foreign keys
 export const deleteUser = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
-    const userId = id as string;
-    const user = await User.findByPk(userId);
+    const id     = String(req.params.id);
+    const userId = parseInt(id, 10);
 
+    const user = await User.findByPk(id);
     if (!user) {
-      res.status(404).json({ errorCode: 404, message: 'Not Found', description: `No user found with ID ${userId}` });
+      res.status(404).json({ errorCode: 404, message: 'Not Found', description: `No user found with ID ${id}` });
       return;
     }
 
@@ -329,22 +332,56 @@ export const deleteUser = async (req: AuthenticatedRequest, res: Response): Prom
       return;
     }
 
-    // Admin deleting their own account — check another Admin exists
+    // Admin deleting their own account — check another Admin exists first
     if (user.id === req.user!.userId && user.role === 'Admin') {
       const otherAdminCount = await User.count({
-        where: { role: 'Admin', isActive: true, id: { [Op.ne]: req.user!.userId } }
+        where: {
+          role: 'Admin',
+          isActive: true,
+          id: { [Op.ne]: req.user!.userId }
+        }
       });
       if (otherAdminCount === 0) {
-        res.status(400).json({ errorCode: 400, message: 'Bad Request', description: 'You cannot delete your own account because you are the only Admin. Please create another Admin first.' });
+        res.status(400).json({
+          errorCode: 400,
+          message: 'Bad Request',
+          description: 'You cannot delete your own account because you are the only Admin. Please create another Admin first.'
+        });
         return;
       }
     }
 
     const deletedUserEmail = user.email;
-    const deletedUserName = user.name;
+    const deletedUserName  = user.name;
 
+    // ── Manual cascade cleanup ─────────────────────────
+    // Cleans up all foreign key references before deleting the user
+    // so deletion works regardless of DB FK configuration
+    const TaskAssignee = (await import('../models/TaskAssignee')).default;
+    const Notification = (await import('../models/Notification')).default;
+    const Comment      = (await import('../models/Comment')).default;
+    const Attachment   = (await import('../models/Attachment')).default;
+    const Task         = (await import('../models/Task')).default;
+
+    // 1. Remove this user from all task assignments
+    await TaskAssignee.destroy({ where: { userId } });
+
+    // 2. Delete all notifications for this user
+    await Notification.destroy({ where: { userId } });
+
+    // 3. Set userId to NULL on comments (keep comment text — do not delete it)
+    await Comment.update({ userId: null as any }, { where: { userId } });
+
+    // 4. Set uploadedBy to NULL on attachments (keep file records intact)
+    await Attachment.update({ uploadedBy: null as any }, { where: { uploadedBy: userId } });
+
+    // 5. Set createdBy to NULL on tasks (task stays, creator reference is cleared)
+    await Task.update({ createdBy: null as any }, { where: { createdBy: userId } });
+
+    // 6. Finally destroy the user record
     await user.destroy();
 
+    // Send deletion notification email
     try {
       await sendAccountDeletedEmail(deletedUserEmail, deletedUserName);
     } catch (emailError: any) {
@@ -352,8 +389,12 @@ export const deleteUser = async (req: AuthenticatedRequest, res: Response): Prom
     }
 
     res.status(200).json({ message: `User ${deletedUserName} has been permanently deleted` });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Delete user error:', error);
-    res.status(500).json({ errorCode: 500, message: 'Internal Server Error', description: 'Something went wrong on the server' });
+    res.status(500).json({
+      errorCode: 500,
+      message: 'Internal Server Error',
+      description: `Failed to delete user: ${error.message || 'Something went wrong on the server'}`
+    });
   }
 };

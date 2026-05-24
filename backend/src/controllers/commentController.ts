@@ -23,8 +23,10 @@ const safeDeleteFile = (filePath: string | null): void => {
   }
 };
 
-// Helper: check task access
-// Returns the task if allowed, sends error response and returns null if not
+// ── Helper: check VIEW access ──────────────────────────
+// Admin: any task
+// PM: any task (view only — interaction is checked separately)
+// Collaborator: must be assigned
 const checkTaskAccess = async (
   taskId: string,
   user: { userId: number; role: string },
@@ -37,19 +39,59 @@ const checkTaskAccess = async (
     return null;
   }
 
-  // Admin and Project Manager can access all tasks
-  if (user.role === 'Admin' || user.role === 'ProjectManager') {
+  if (user.role === 'Admin') return task;
+
+  if (user.role === 'ProjectManager') {
+    // PM can view any task — no restriction on reading
     return task;
   }
 
-  // Collaborator — check TaskAssignee table only
   if (user.role === 'Collaborator') {
     const isAssigned = await TaskAssignee.findOne({
-      where: { taskId: task.id, userId: user.userId }
+      where: { taskId: parseInt(taskId, 10), userId: user.userId }
     });
-
     if (isAssigned) return task;
+    res.status(403).json({ errorCode: 403, message: 'Forbidden', description: 'You can only view tasks assigned to you' });
+    return null;
+  }
 
+  res.status(403).json({ errorCode: 403, message: 'Forbidden', description: 'You do not have permission to access this task' });
+  return null;
+};
+
+// ── Helper: check INTERACTION access ──────────────────
+// Admin: any task
+// PM: must be CREATOR or ASSIGNEE to post/edit/delete comments or upload files
+// Collaborator: must be assigned
+const checkTaskInteractionAccess = async (
+  taskId: string,
+  user: { userId: number; role: string },
+  res: Response
+): Promise<Task | null> => {
+  const task = await Task.findByPk(taskId);
+
+  if (!task) {
+    res.status(404).json({ errorCode: 404, message: 'Not Found', description: `No task found with ID ${taskId}` });
+    return null;
+  }
+
+  if (user.role === 'Admin') return task;
+
+  if (user.role === 'ProjectManager') {
+    const isCreator  = task.createdBy === user.userId;
+    const isAssigned = await TaskAssignee.findOne({
+      where: { taskId: parseInt(taskId, 10), userId: user.userId }
+    });
+    if (isCreator || isAssigned) return task;
+    res.status(403).json({ errorCode: 403, message: 'Forbidden', description: 'You can only comment or upload files on tasks you created or are assigned to' });
+    return null;
+  }
+
+  if (user.role === 'Collaborator') {
+    const isAssigned = await TaskAssignee.findOne({
+      where: { taskId: parseInt(taskId, 10), userId: user.userId }
+    });
+    if (isAssigned) return task;
     res.status(403).json({ errorCode: 403, message: 'Forbidden', description: 'You can only interact with tasks assigned to you' });
     return null;
   }
@@ -63,12 +105,11 @@ const checkTaskAccess = async (
 // Send as multipart/form-data with content field and optional file field
 export const addComment = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { taskId } = req.params;
-    const taskIdStr = taskId as string;
+    const taskId    = String(req.params.taskId);
     const { content } = req.body;
 
     const hasContent = content && content.trim().length > 0;
-    const hasFile = !!req.file;
+    const hasFile    = !!req.file;
 
     if (!hasContent && !hasFile) {
       res.status(400).json({ errorCode: 400, message: 'Bad Request', description: 'Please enter a comment or attach a file' });
@@ -81,25 +122,26 @@ export const addComment = async (req: AuthenticatedRequest, res: Response): Prom
       return;
     }
 
-    const task = await checkTaskAccess(taskIdStr, req.user!, res);
+    // Use INTERACTION check — PM must be creator or assignee
+    const task = await checkTaskInteractionAccess(taskId, req.user!, res);
     if (!task) {
       safeDeleteFile(req.file?.path || null);
       return;
     }
 
     const commentData: any = {
-      content: hasContent ? content.trim() : '',
-      taskId: parseInt(taskIdStr),
-      userId: req.user!.userId,
+      content:  hasContent ? content.trim() : '',
+      taskId:   parseInt(taskId, 10),
+      userId:   req.user!.userId,
       isEdited: false
     };
 
     if (hasFile && req.file) {
-      commentData.commentFileName      = req.file.originalname;
+      commentData.commentFileName       = req.file.originalname;
       commentData.commentStoredFileName = req.file.filename;
-      commentData.commentFilePath      = req.file.path;
-      commentData.commentFileType      = req.file.mimetype;
-      commentData.commentFileSize      = req.file.size;
+      commentData.commentFilePath       = req.file.path;
+      commentData.commentFileType       = req.file.mimetype;
+      commentData.commentFileSize       = req.file.size;
     }
 
     const comment = await Comment.create(commentData);
@@ -111,18 +153,18 @@ export const addComment = async (req: AuthenticatedRequest, res: Response): Prom
 
     // Send real-time notification to all task assignees except the commenter
     try {
-      const io = getIO(req);
-      const assignees = await TaskAssignee.findAll({ where: { taskId: task.id } });
+      const io        = getIO(req);
+      const assignees = await TaskAssignee.findAll({ where: { taskId: parseInt(taskId, 10) } });
       const assigneeIds = assignees
         .map(a => a.userId)
         .filter(uid => uid !== req.user!.userId);
 
       if (assigneeIds.length > 0) {
         await sendNotificationToMany(io, assigneeIds, {
-          title: 'New Comment Added',
+          title:   'New Comment Added',
           message: `${(commentWithAuthor as any).author.name} commented on task: ${task.title}`,
-          type: 'comment_added',
-          taskId: task.id
+          type:    'comment_added',
+          taskId:  task.id
         });
       }
     } catch (notifError: any) {
@@ -141,14 +183,14 @@ export const addComment = async (req: AuthenticatedRequest, res: Response): Prom
 // GET /api/comments/:taskId
 export const getCommentsByTask = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { taskId } = req.params;
-    const taskIdStr = taskId as string;
+    const taskId = String(req.params.taskId);
 
-    const task = await checkTaskAccess(taskIdStr, req.user!, res);
+    // Use VIEW access — PM can read any task's comments
+    const task = await checkTaskAccess(taskId, req.user!, res);
     if (!task) return;
 
     const comments = await Comment.findAll({
-      where: { taskId: taskIdStr },
+      where: { taskId: parseInt(taskId, 10) },
       include: [{ model: User, as: 'author', attributes: ['id', 'name', 'email', 'role'] }],
       attributes: { exclude: ['commentFilePath'] },
       order: [['createdAt', 'ASC']]
@@ -166,8 +208,7 @@ export const getCommentsByTask = async (req: AuthenticatedRequest, res: Response
 // All roles — only own comments can be edited
 export const updateComment = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { commentId } = req.params;
-    const commentIdStr = commentId as string;
+    const commentId = String(req.params.commentId);
     const { content } = req.body;
 
     if (!content || !content.trim()) {
@@ -180,9 +221,9 @@ export const updateComment = async (req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    const comment = await Comment.findByPk(commentIdStr);
+    const comment = await Comment.findByPk(commentId);
     if (!comment) {
-      res.status(404).json({ errorCode: 404, message: 'Not Found', description: `No comment found with ID ${commentIdStr}` });
+      res.status(404).json({ errorCode: 404, message: 'Not Found', description: `No comment found with ID ${commentId}` });
       return;
     }
 
@@ -196,7 +237,14 @@ export const updateComment = async (req: AuthenticatedRequest, res: Response): P
 
     res.status(200).json({
       message: 'Comment updated successfully',
-      comment: { id: comment.id, content: comment.content, isEdited: comment.isEdited, taskId: comment.taskId, userId: comment.userId, updatedAt: comment.updatedAt }
+      comment: {
+        id:        comment.id,
+        content:   comment.content,
+        isEdited:  comment.isEdited,
+        taskId:    comment.taskId,
+        userId:    comment.userId,
+        updatedAt: comment.updatedAt
+      }
     });
   } catch (error) {
     console.error('Update comment error:', error);
@@ -206,19 +254,23 @@ export const updateComment = async (req: AuthenticatedRequest, res: Response): P
 
 // ── DELETE COMMENT ─────────────────────────────────────
 // DELETE /api/comments/:commentId
+// Admin:        can delete any comment
+// PM:           can only delete own comments
+// Collaborator: can only delete own comments
 export const deleteComment = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { commentId } = req.params;
-    const commentIdStr = commentId as string;
+    const commentId = String(req.params.commentId);
 
-    const comment = await Comment.findByPk(commentIdStr);
+    const comment = await Comment.findByPk(commentId);
     if (!comment) {
-      res.status(404).json({ errorCode: 404, message: 'Not Found', description: `No comment found with ID ${commentIdStr}` });
+      res.status(404).json({ errorCode: 404, message: 'Not Found', description: `No comment found with ID ${commentId}` });
       return;
     }
 
-    // Collaborator can only delete their own comments
-    if (req.user!.role === 'Collaborator' && comment.userId !== req.user!.userId) {
+    const isAdmin  = req.user!.role === 'Admin';
+    const isAuthor = comment.userId === req.user!.userId;
+
+    if (!isAdmin && !isAuthor) {
       res.status(403).json({ errorCode: 403, message: 'Forbidden', description: 'You can only delete your own comments' });
       return;
     }
@@ -238,10 +290,9 @@ export const deleteComment = async (req: AuthenticatedRequest, res: Response): P
 // DELETE /api/comments/:commentId/attachment
 export const removeCommentAttachment = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { commentId } = req.params;
-    const commentIdStr = commentId as string;
+    const commentId = String(req.params.commentId);
 
-    const comment = await Comment.findByPk(commentIdStr);
+    const comment = await Comment.findByPk(commentId);
     if (!comment) {
       res.status(404).json({ errorCode: 404, message: 'Not Found', description: 'Comment not found' });
       return;
@@ -252,7 +303,7 @@ export const removeCommentAttachment = async (req: AuthenticatedRequest, res: Re
       return;
     }
 
-    // Only comment author can remove their attachment
+    // Only the comment author can remove their attachment
     if (comment.userId !== req.user!.userId) {
       res.status(403).json({ errorCode: 403, message: 'Forbidden', description: 'You can only remove attachments from your own comments' });
       return;
@@ -261,11 +312,11 @@ export const removeCommentAttachment = async (req: AuthenticatedRequest, res: Re
     safeDeleteFile(comment.commentFilePath);
 
     await comment.update({
-      commentFileName: null,
+      commentFileName:       null,
       commentStoredFileName: null,
-      commentFilePath: null,
-      commentFileType: null,
-      commentFileSize: null
+      commentFilePath:       null,
+      commentFileType:       null,
+      commentFileSize:       null
     });
 
     res.status(200).json({ message: 'Comment attachment removed successfully' });
@@ -280,12 +331,11 @@ export const removeCommentAttachment = async (req: AuthenticatedRequest, res: Re
 // IMPORTANT: This route must be registered BEFORE /:taskId in the routes file
 export const downloadCommentAttachment = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { commentId } = req.params;
-    const commentIdStr = commentId as string;
+    const commentId = String(req.params.commentId);
 
-    const comment = await Comment.findByPk(commentIdStr);
+    const comment = await Comment.findByPk(commentId);
     if (!comment) {
-      res.status(404).json({ errorCode: 404, message: 'Not Found', description: `No comment found with ID ${commentIdStr}` });
+      res.status(404).json({ errorCode: 404, message: 'Not Found', description: `No comment found with ID ${commentId}` });
       return;
     }
 
@@ -294,6 +344,7 @@ export const downloadCommentAttachment = async (req: AuthenticatedRequest, res: 
       return;
     }
 
+    // Use VIEW access — PM can download from any task they can view
     const task = await checkTaskAccess(String(comment.taskId), req.user!, res);
     if (!task) return;
 
