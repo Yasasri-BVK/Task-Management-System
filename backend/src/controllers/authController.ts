@@ -209,7 +209,7 @@ export const changePassword = async (req: AuthenticatedRequest, res: Response): 
   try {
     const { newPassword } = req.body;
 
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@#$!%*?&])[A-Za-z\d@#$!%*?&]{8,}$/;
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/;
 
     if (!newPassword) {
       res.status(400).json({ errorCode: 400, message: 'Bad Request', description: 'New password is required' });
