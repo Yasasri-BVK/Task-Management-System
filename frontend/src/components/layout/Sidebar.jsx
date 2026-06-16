@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -39,36 +39,36 @@ export default function Sidebar({ isOpen, onClose }) {
   const accent   = roleColor[user?.role] || '#6366f1';
 
   const t = isDark ? {
-    sidebar:      '#13152a',
-    border:       'rgba(255,255,255,0.07)',
-    navLabel:     'rgba(255,255,255,0.28)',
-    navDefault:   'rgba(255,255,255,0.55)',
-    navActive:    '#ffffff',
-    navActiveBg:  `${accent}28`,
-    navHoverBg:   'rgba(255,255,255,0.06)',
+    sidebar:        '#13152a',
+    border:         'rgba(255,255,255,0.07)',
+    navLabel:       'rgba(255,255,255,0.28)',
+    navDefault:     'rgba(255,255,255,0.55)',
+    navActive:      '#ffffff',
+    navActiveBg:    `${accent}28`,
+    navHoverBg:     'rgba(255,255,255,0.06)',
     navActiveBorder: accent,
-    userCard:     'rgba(255,255,255,0.05)',
-    userCardBorder:'rgba(255,255,255,0.08)',
-    userName:     'rgba(255,255,255,0.9)',
-    divider:      'rgba(255,255,255,0.07)',
+    userCard:       'rgba(255,255,255,0.05)',
+    userCardBorder: 'rgba(255,255,255,0.08)',
+    userName:       'rgba(255,255,255,0.9)',
+    divider:        'rgba(255,255,255,0.07)',
   } : {
-    sidebar:      '#ffffff',
-    border:       'rgba(0,0,0,0.07)',
-    navLabel:     'rgba(0,0,0,0.35)',
-    navDefault:   '#4b5563',
-    navActive:    accent,
-    navActiveBg:  `${accent}14`,
-    navHoverBg:   'rgba(0,0,0,0.04)',
+    sidebar:        '#ffffff',
+    border:         'rgba(0,0,0,0.07)',
+    navLabel:       'rgba(0,0,0,0.35)',
+    navDefault:     '#4b5563',
+    navActive:      accent,
+    navActiveBg:    `${accent}14`,
+    navHoverBg:     'rgba(0,0,0,0.04)',
     navActiveBorder: accent,
-    userCard:     '#f8fafc',
-    userCardBorder:'rgba(0,0,0,0.08)',
-    userName:     '#111827',
-    divider:      'rgba(0,0,0,0.07)',
+    userCard:       '#f8fafc',
+    userCardBorder: 'rgba(0,0,0,0.08)',
+    userName:       '#111827',
+    divider:        'rgba(0,0,0,0.07)',
   };
 
   return (
     <>
-      {/* Mobile overlay — only on mobile when sidebar is open */}
+      {/* Overlay — only on mobile when open */}
       {isOpen && isMobile && (
         <div
           onClick={onClose}

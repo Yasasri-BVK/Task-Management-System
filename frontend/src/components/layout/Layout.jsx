@@ -10,11 +10,7 @@ export default function Layout({ children }) {
     const handler = () => {
       const mobile = window.innerWidth < 769;
       setIsMobile(mobile);
-      if (!mobile) {
-        setSidebarOpen(true);
-      } else {
-        setSidebarOpen(false);
-      }
+      setSidebarOpen(!mobile);
     };
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
