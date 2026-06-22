@@ -3,7 +3,7 @@ Department of Industrial Management - University of Kelaniya
 INTE 21323 - Web Application Development (Level 2, Semester 1)
 
 ## Project Overview
-The Task Management System (TMS) is a full-stack web application designed to help teams organize, track, and manage their daily tasks efficiently. The project follows a modern three-tier architecture using the Node.js, Express, React, and MySQL stack with a Cloud Database.
+The Task Management System (TMS) is a full-stack web application designed to help teams organize, track, and manage their daily tasks seamlessly. The project follows a modern three-tier architecture using the Node.js, Express, React, and MySQL stack with a Cloud Database.
 
 ### Technical Stack
 * Frontend: React.js with Vite (ESM)
