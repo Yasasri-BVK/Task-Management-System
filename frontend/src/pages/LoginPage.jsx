@@ -97,7 +97,7 @@ export default function LoginPage() {
       </div>
 
       {/* Theme toggle */}
-      <button onClick={toggleTheme} style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 10, background: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)', backdropFilter: 'blur(10px)', border: 'none', borderRadius: '50%', width: '45px', height: '45px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isDark ? '#fff' : '#111', transition: 'all 0.2s', fontSize: '18px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+      <button onClick={toggleTheme} style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 10, background: isDark ? 'rgba(255,255,255,0.15)' : '#ffffff', backdropFilter: 'blur(10px)', border: 'none', borderRadius: '50%', width: '45px', height: '45px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isDark ? '#fff' : '#111', transition: 'all 0.2s', fontSize: '18px', boxShadow: isDark ? '0 4px 12px rgba(0,0,0,0.1)' : '0 8px 20px rgba(0,0,0,0.15)' }}>
         {isDark ? '☀️' : '🌙'}
       </button>
 
@@ -114,7 +114,7 @@ export default function LoginPage() {
       </div>
 
       {/* Card */}
-      <div className="animate-right" style={{ backgroundColor: isDark ? 'rgba(30, 41, 59, 0.85)' : 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(16px)', borderRadius: '24px', padding: '48px 40px', width: '100%', maxWidth: '440px', boxShadow: isDark ? '0 20px 50px rgba(0,0,0,0.5)' : '0 20px 50px rgba(0,0,0,0.15)', position: 'relative', zIndex: 1, border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.5)'}` }}>
+      <div className="animate-right" style={{ backgroundColor: isDark ? 'rgba(30, 41, 59, 0.85)' : '#ffffff', backdropFilter: 'blur(16px)', borderRadius: '24px', padding: '48px 40px', width: '100%', maxWidth: '440px', boxShadow: isDark ? '0 20px 50px rgba(0,0,0,0.5)' : '0 25px 60px rgba(0,0,0,0.15)', position: 'relative', zIndex: 1, border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,1)'}` }}>
 
         {/* Brand */}
         <div style={{ textAlign: 'center', marginBottom: '36px' }}>
