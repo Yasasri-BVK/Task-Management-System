@@ -3,82 +3,24 @@ import { useRef, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import api from '../../api/axios';
 
-const typeIcon = {
+/* ----------------------------------------------------------------------- */
+/*  Constants                                                               */
+/* ----------------------------------------------------------------------- */
+
+const TYPE_ICON = {
   task_assigned: '📋',
   status_changed: '🔄',
   comment_added: '💬',
   deadline_approaching: '⏰',
-  general: '🔔'
+  general: '🔔',
 };
 
-export default function NotificationPanel({ onClose }) {
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
-  const ref = useRef();
+const MAX_NOTIFICATIONS_SHOWN = 20;
+const FALLBACK_ICON = '🔔';
 
-  useEffect(() => {
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) onClose();
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
-
-  const handleMarkAllRead = async () => {
-    try {
-      await api.patch('/notifications/read-all');
-      markAllAsRead();
-    } catch (e) { console.error(e); }
-  };
-
-  const handleMarkRead = async (id) => {
-    try {
-      await api.patch(`/notifications/${id}/read`);
-      markAsRead(id);
-    } catch (e) { console.error(e); }
-  };
-
-  return (
-    <div ref={ref} style={styles.panel}>
-      <div style={styles.header}>
-        <span style={styles.title}>Notifications</span>
-        {unreadCount > 0 && (
-          <button onClick={handleMarkAllRead} style={styles.markAllBtn}>
-            Mark all read
-          </button>
-        )}
-      </div>
-
-      <div style={styles.list}>
-        {notifications.length === 0 ? (
-          <div style={styles.empty}>
-            <span style={{ fontSize: '32px' }}>🔔</span>
-            <p>No notifications yet</p>
-          </div>
-        ) : (
-          notifications.slice(0, 20).map(notif => (
-            <div key={notif.id}
-              onClick={() => !notif.isRead && handleMarkRead(notif.id)}
-              style={{
-                ...styles.item,
-                backgroundColor: notif.isRead ? 'transparent' : 'var(--accent-light)',
-                cursor: notif.isRead ? 'default' : 'pointer'
-              }}>
-              <span style={styles.icon}>{typeIcon[notif.type] || '🔔'}</span>
-              <div style={styles.content}>
-                <p style={styles.notifTitle}>{notif.title}</p>
-                <p style={styles.notifMsg}>{notif.message}</p>
-                <p style={styles.notifTime}>
-                  {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
-                </p>
-              </div>
-              {!notif.isRead && <div style={styles.dot} />}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
+/* ----------------------------------------------------------------------- */
+/*  Style tokens                                                            */
+/* ----------------------------------------------------------------------- */
 
 const styles = {
   panel: {
@@ -124,3 +66,135 @@ const styles = {
     backgroundColor: 'var(--accent)', flexShrink: 0, marginTop: '6px'
   }
 };
+
+/* ----------------------------------------------------------------------- */
+/*  Outside-click hook                                                      */
+/* ----------------------------------------------------------------------- */
+
+function useOutsideClick(onOutsideClick) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onOutsideClick();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onOutsideClick]);
+
+  return ref;
+}
+
+/* ----------------------------------------------------------------------- */
+/*  Notification API actions                                                */
+/* ----------------------------------------------------------------------- */
+
+async function markAllNotificationsRead() {
+  await api.patch('/notifications/read-all');
+}
+
+async function markNotificationRead(id) {
+  await api.patch(`/notifications/${id}/read`);
+}
+
+/* ----------------------------------------------------------------------- */
+/*  Subcomponents                                                           */
+/* ----------------------------------------------------------------------- */
+
+function PanelHeader({ unreadCount, onMarkAllRead }) {
+  return (
+    <div style={styles.header}>
+      <span style={styles.title}>Notifications</span>
+      {unreadCount > 0 && (
+        <button onClick={onMarkAllRead} style={styles.markAllBtn}>
+          Mark all read
+        </button>
+      )}
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div style={styles.empty}>
+      <span style={{ fontSize: '32px' }}>{FALLBACK_ICON}</span>
+      <p>No notifications yet</p>
+    </div>
+  );
+}
+
+function NotificationItem({ notification, onMarkRead }) {
+  const handleClick = () => {
+    if (!notification.isRead) onMarkRead(notification.id);
+  };
+
+  return (
+    <div
+      onClick={handleClick}
+      style={{
+        ...styles.item,
+        backgroundColor: notification.isRead ? 'transparent' : 'var(--accent-light)',
+        cursor: notification.isRead ? 'default' : 'pointer',
+      }}
+    >
+      <span style={styles.icon}>{TYPE_ICON[notification.type] || FALLBACK_ICON}</span>
+      <div style={styles.content}>
+        <p style={styles.notifTitle}>{notification.title}</p>
+        <p style={styles.notifMsg}>{notification.message}</p>
+        <p style={styles.notifTime}>
+          {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+        </p>
+      </div>
+      {!notification.isRead && <div style={styles.dot} />}
+    </div>
+  );
+}
+
+function NotificationList({ notifications, onMarkRead }) {
+  if (notifications.length === 0) return <EmptyState />;
+
+  return (
+    <>
+      {notifications.slice(0, MAX_NOTIFICATIONS_SHOWN).map((notification) => (
+        <NotificationItem key={notification.id} notification={notification} onMarkRead={onMarkRead} />
+      ))}
+    </>
+  );
+}
+
+/* ----------------------------------------------------------------------- */
+/*  Main component                                                          */
+/* ----------------------------------------------------------------------- */
+
+export default function NotificationPanel({ onClose }) {
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const panelRef = useOutsideClick(onClose);
+
+  const handleMarkAllRead = async () => {
+    try {
+      await markAllNotificationsRead();
+      markAllAsRead();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleMarkRead = async (id) => {
+    try {
+      await markNotificationRead(id);
+      markAsRead(id);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  return (
+    <div ref={panelRef} style={styles.panel}>
+      <PanelHeader unreadCount={unreadCount} onMarkAllRead={handleMarkAllRead} />
+
+      <div style={styles.list}>
+        <NotificationList notifications={notifications} onMarkRead={handleMarkRead} />
+      </div>
+    </div>
+  );
+}
